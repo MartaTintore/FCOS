@@ -107,6 +107,10 @@ class DatasetCatalog(object):
         "cityscapes_fine_instanceonly_seg_test_cocostyle": {
             "img_dir": "cityscapes/images",
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_test.json"
+        },
+        "visual_genome_coco_classes": {
+            "img_dir": "visual_genome/all",
+            "ann_file": "visual_genome/annotations/objects.json"
         }
     }
 
@@ -132,6 +136,17 @@ class DatasetCatalog(object):
             )
             return dict(
                 factory="PascalVOCDataset",
+                args=args,
+            )
+        elif "visual_genome" in name:
+            data_dir = DatasetCatalog.DATA_DIR
+            attrs = DatasetCatalog.DATASETS[name]
+            args = dict(
+                root=os.path.join(data_dir, attrs["img_dir"]),
+                ann_file=os.path.join(data_dir, attrs["ann_file"]),
+            )
+            return dict(
+                factory="VisualGenomeDataset",
                 args=args,
             )
         raise RuntimeError("Dataset not available: {}".format(name))
