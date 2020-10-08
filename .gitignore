@@ -28,3 +28,6 @@ dist/
 # project dirs
 /datasets
 /models
+/inference
+/demo/output_imgs
+/demo/images

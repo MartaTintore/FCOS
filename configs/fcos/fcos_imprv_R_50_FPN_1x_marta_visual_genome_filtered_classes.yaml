@@ -22,7 +22,7 @@ MODEL:
     IOU_LOSS_TYPE: "giou"
 DATASETS:
   TRAIN: ("coco_2014_train", "coco_2014_valminusminival")
-  TEST: ("coco_mini_2014",)
+  TEST: ("visual_genome_filtered_classes",)
 INPUT:
   MIN_SIZE_TRAIN: (800,)
   MAX_SIZE_TRAIN: 1333

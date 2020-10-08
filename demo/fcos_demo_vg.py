@@ -1,18 +1,16 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import argparse
 import cv2, os
-
-from fcos_core.config import cfg
-from predictor import COCODemo
-
 import time
 
+from fcos_core.config import cfg
+from predictor_vg import VisualGenomeDemo
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch Object Detection Webcam Demo")
     parser.add_argument(
         "--config-file",
-        default="configs/fcos/fcos_imprv_R_50_FPN_1x.yaml",
+        default="configs/fcos/fcos_imprv_R_50_FPN_1x_marta_visual_genome_filtered_classes_small.yaml",
         metavar="FILE",
         help="path to config file",
     )
@@ -24,7 +22,7 @@ def main():
     )
     parser.add_argument(
         "--images-dir",
-        default="demo/images",
+        default="demo/images/visual_genome",
         metavar="DIR",
         help="path to demo images directory",
     )
@@ -34,6 +32,12 @@ def main():
         default=800,
         help="Smallest size of the image to feed to the model. "
             "Model was trained with 800, which gives best results",
+    )
+    parser.add_argument(
+        "--ground-truth-file",
+        type=str,
+        default=None,
+        help="if available, ground truth to perform validation instead of testing only"
     )
     parser.add_argument(
         "opts",
@@ -87,10 +91,11 @@ def main():
     demo_im_names = os.listdir(args.images_dir)
 
     # prepare object that handles inference plus adds predictions on top of image
-    coco_demo = COCODemo(
+    vg_demo = VisualGenomeDemo(
         cfg,
         confidence_thresholds_for_classes=thresholds_for_classes,
-        min_image_size=args.min_image_size
+        min_image_size=args.min_image_size,
+        ground_truth_file=args.ground_truth_file
     )
 
     for im_name in demo_im_names:
@@ -98,13 +103,9 @@ def main():
         if img is None:
             continue
         start_time = time.time()
-        composite = coco_demo.run_on_opencv_image(img)
+        composite = vg_demo.run_on_opencv_image(img)
         print("{}\tinference time: {:.2f}s".format(im_name, time.time() - start_time))
-        cv2.imwrite('demo/output_imgs/' + im_name + '.jpg', composite)
-        #cv2.imshow(im_name, composite)
-    #print("Press any keys to exit ...")
-    #cv2.waitKey()
-    #cv2.destroyAllWindows()
+        cv2.imwrite('demo/output_imgs/visual_genome/' + im_name, composite)
 
 if __name__ == "__main__":
     main()

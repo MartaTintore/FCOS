@@ -17,76 +17,76 @@ from matplotlib.patches import Polygon
 
 from fcos_core.structures.bounding_box import BoxList
 
-def _has_only_empty_bbox(anno):
-    return all(any(o <= 1 for o in obj["bbox"][2:]) for obj in anno)
-
-def has_valid_annotation(anno):
-    if len(anno) == 0:
-        return False
-    if _has_only_empty_bbox(anno):
-        return False
-    return True
-
 def _isArrayLike(obj):
     return hasattr(obj, '__iter__') and hasattr(obj, '__len__')
 
 class VisualGenome:
 
-    def __init__(self, root, ann_file=None, filter_classes=True, cats_file=None):
+    def __init__(self, root=None, ann_file_vg=None, cats_file=None, vg_format=False, filter_classes=True):
         
+        self.dataset = dict()
         self.anns = dict()
         self.imgs = dict()
         self.cats = dict()
-        self.ids = list()
         self.imgToAnns = defaultdict(list)
         self.catToImgs = defaultdict(list)
-        self.root = root
 
-        if not ann_file == None:
-            print('Loading annotations into memory...')
+        if vg_format and (not ann_file_vg == None and not cats_file == None):
+            categories_vg = json.load(open(cats_file, 'r'))
+            print('Loading vg annotations into memory...')
             tic = time.time()
-            dataset = json.load(open(ann_file, 'r'))
-            self.dataset = dataset
+            dataset_vg = json.load(open(ann_file_vg, 'r'))
             print('Done (t={:0.2f}s)'.format(time.time()- tic))
-        if not cats_file == None:
-            categories = json.load(open(cats_file, 'r'))
-            self.categories = categories
-        if not ann_file == None and not cats_file == None:
-            if filter_classes:
-                print(len(dataset))
-                print('Filtering visual genome dataset (only coco classes)...')
-                dataset_coco_classes = self.get_only_coco_classes()
-                self.dataset = dataset_coco_classes
-                print(len(dataset))
+            if filter_classes and not root == None:
+                print('Filtering visual genome dataset (only coco classes)...')                
+                print('Initial dataset contains {} images'.format(len(dataset_vg)))
+                dataset_vg = self.get_only_coco_classes(root, dataset_vg, categories_vg)
+                print('Filtered dataset contains {} images'.format(len(dataset_vg)))
+            self.to_coco_format(dataset_vg, categories_vg)
+        if not ann_file_vg == None:
             self.createIndex()
-            self.ids = list(sorted(self.imgs.keys()))
-            self.add_img_info()
+            if vg_format and not root == None:
+            	self.add_img_info(root)
 
-    def __getitem__(self, index):
+    def to_coco_format(self, dataset_vg, categories_vg):
 
-        img_id = self.ids[index]
-        ann_ids = self.getAnnIds(imgIds=img_id)
-        target = self.loadAnns(ann_ids)
-        path = self.loadImgs(img_id)[0]['file_name']
+        self.dataset['info'] = {}
+        self.dataset['licenses'] = []
+        self.dataset['images'] = []
+        self.dataset['annotations'] = []
+        self.dataset['categories'] = []
 
-        img = Image.open(os.path.join(self.root, path)).convert('RGB')
+        for cat_id in categories_vg.keys():
+            cat = {'id': cat_id,
+                   'name': categories_vg[cat_id],
+                   'supercategory': ''}
+            self.dataset['categories'].append(cat)
 
-        return img, target
+        for image in dataset_vg:
+            img = {}
+            img['id'] = image['image_id']
+            img['file_name'] = str(image['image_id']) + '.jpg'
+            self.dataset['images'].append(img)
+            for box in image['objects']:
+                ann = {}
+                ann['id'] = box['object_id']
+                ann['image_id'] = image['image_id']
+                cat_dic = list(filter(lambda cat: cat['name'] == box['names'][0], self.dataset['categories']))
+                ann['category_id'] = cat_dic[0]['id']
+                ann['area'] = box['w']*box['h']
+                ann['bbox'] = [box['x'], box['y'], box['w'], box['h']]
+                self.dataset['annotations'].append(ann)
 
-    def __len__(self):
-        
-        return len(self.ids)
-
-    def get_only_coco_classes(self):
+    def get_only_coco_classes(self, root, dataset_vg, categories_vg):
 
         cats = list()
-        for cat_id, cat_name in self.categories.items():
+        for cat_id, cat_name in categories_vg.items():
             cats.append(cat_name)
 
         dataset_coco_classes = list()
-        for image in self.dataset:
+        for image in dataset_vg:
             #Check image in visual genome folder
-            filename = os.path.join(self.root, str(image['image_id']) + '.jpg')
+            filename = os.path.join(root, str(image['image_id']) + '.jpg')
             if not os.path.isfile(filename):
                 continue 
             obj_list = []
@@ -108,71 +108,63 @@ class VisualGenome:
                 dataset_coco_classes.append(img_dic)
         return dataset_coco_classes
 
-    def createIndex(self):
-
-        print('Creating index...')
-        anns = {}
-        imgs = {}
-        cats = {}
-        imgToAnns = defaultdict(list)
-        catToImgs = defaultdict(list)
+    def add_img_info(self, root):
         
-        for cat_id in self.categories.keys():
-            cat = {'id': cat_id,
-                   'name': self.categories[cat_id],
-                   'supercategory': ''}
-            cats[cat['id']] = cat
-        for image in self.dataset:
-            for ann in image['objects']:
-                for cat_id, cat_name in self.categories.items():
-                    if cat_name == ann['names'][0]:
-                        cat = cat_id
+        for idx in range(len(self.imgs.keys())):
+            img_id = list(self.imgs.keys())[idx]
+            path = self.loadImgs(img_id)[0]['file_name']
+            image = Image.open(os.path.join(root, path)).convert('RGB')
+            w, h = image.size
+            self.imgs[img_id]['width'] = w
+            self.imgs[img_id]['height'] = h
 
-                ann = {'id': ann['object_id'],
-                        'image_id': image['image_id'],
-                        'category_id': cat,
-                        'area': float(ann['w']*ann['h']),
-                        'bbox': [ann['x'], ann['y'], ann['w'], ann['h']]} 
-                anns[ann['id']] = ann
+    def createIndex(self):
+        
+        print('Creating index...')
+        anns, cats, imgs = {}, {}, {}
+        imgToAnns,catToImgs = defaultdict(list), defaultdict(list)
+
+        if 'annotations' in self.dataset:
+            for ann in self.dataset['annotations']:
                 imgToAnns[ann['image_id']].append(ann)
-                catToImgs[ann['category_id']].append(ann['image_id'])
-            #width, height = self.__getitem__(image['image_id'])[0].size
-            img = {'id': image['image_id'], 
-                    #'width': w,
-                    #'height': h,
-                    'file_name': str(image['image_id']) + '.jpg'}
-            imgs[image['image_id']] = img
-        print('Index created!')
+                anns[ann['id']] = ann
 
-        # Assign to class members
+        if 'images' in self.dataset:
+            for img in self.dataset['images']:
+                imgs[img['id']] = img
+
+        if 'categories' in self.dataset:
+            for cat in self.dataset['categories']:
+                cats[cat['id']] = cat
+
+        if 'annotations' in self.dataset and 'categories' in self.dataset:
+            for ann in self.dataset['annotations']:
+                catToImgs[ann['category_id']].append(ann['image_id'])
+
+        print('index created!')
+
+        # create class members
         self.anns = anns
         self.imgToAnns = imgToAnns
         self.catToImgs = catToImgs
         self.imgs = imgs
         self.cats = cats
-
-    def add_img_info(self):
-        
-        for idx in range(len(self.ids)):
-            w, h = VisualGenome.__getitem__(self, idx)[0].size
-            img_id = self.ids[idx]
-            self.imgs[img_id]['width'] = w
-            self.imgs[img_id]['height'] = h
     
-    def getAnnIds(self, imgIds=[], catIds=[]):
+    def getAnnIds(self, imgIds=[], catIds=[], areaRng=[]):
         
         imgIds = imgIds if _isArrayLike(imgIds) else [imgIds]
         catIds = catIds if _isArrayLike(catIds) else [catIds]
 
-        if len(imgIds) == len(catIds) == 0:
-            anns = self.anns
+        if len(imgIds) == len(catIds) == len(areaRng) == 0:
+            anns = self.dataset['annotations']
         else:
             if not len(imgIds) == 0:
                 lists = [self.imgToAnns[imgId] for imgId in imgIds if imgId in self.imgToAnns]
                 anns = list(itertools.chain.from_iterable(lists))
             else:
-                anns = self.anns
+                anns = self.dataset['annotations']
             anns = anns if len(catIds) == 0 else [ann for ann in anns if ann['category_id'] in catIds]
+            anns = anns if len(areaRng) == 0 else [ann for ann in anns if ann['area'] > areaRng[0] and ann['area'] < areaRng[1]]
         ids = [ann['id'] for ann in anns]
         return ids
     
@@ -183,12 +175,13 @@ class VisualGenome:
         catIds = catIds if _isArrayLike(catIds) else [catIds]
 
         if len(catNms) == len(supNms) == len(catIds) == 0:
-            cats = self.cats.values()
+            cats = self.dataset['categories']
         else:
-            cats = self.cats
+            cats = self.dataset['categories']
             cats = cats if len(catNms) == 0 else [cat for cat in cats if cat['name'] in catNms]
             cats = cats if len(supNms) == 0 else [cat for cat in cats if cat['supercategory'] in supNms]
             cats = cats if len(catIds) == 0 else [cat for cat in cats if cat['id'] in catIds]
+        
         ids = [cat['id'] for cat in cats]
         return ids
 
@@ -227,30 +220,10 @@ class VisualGenome:
         elif type(ids) == int:
             return [self.imgs[ids]]
 
-    def showAnns(self, anns, draw_bbox=False):
-        if len(anns)==0:
-            return 0
-        ax = plt.gca()
-        ax.set_autoscale_on(False)
-        polygons = []
-        for ann in anns:
-            c = (np.random.random((1, 3))*0.6+0.4).tolist()[0]
-            if draw_bbox:
-                [bbox_x, bbox_y, bbox_w, bbox_h] = ann['bbox']
-                poly = [[bbox_x, bbox_y], [bbox_x, bbox_y+bbox_h], [bbox_x+bbox_w, bbox_y+bbox_h], [bbox_x+bbox_w, bbox_y]]
-                np_poly = np.array(poly).reshape((4,2))
-                polygons.append(Polygon(np_poly))
-                color.append(c)
-        p = PatchCollection(polygons, facecolor=color, linewidths=0, alpha=0.4)
-        ax.add_collection(p)
-        p = PatchCollection(polygons, facecolor='none', edgecolors=color, linewidths=2)
-        ax.add_collection(p)
-
     def loadRes(self, resFile):
-        res = VisualGenome(root=self.root)
-        res.categories = self.categories
-        res.dataset = self.dataset
-        res.imgs = [img for img in self.imgs]
+
+        res = VisualGenome()
+        res.dataset['images'] = [img for img in self.dataset['images']]
 
         print('Loading and preparing results')
         tic = time.time()
@@ -260,18 +233,20 @@ class VisualGenome:
             anns = self.loadNumpyAnnotations(resFile)
         else:
             anns = resFile
-        assert type(anns) == list, 'Results are not an array of aobjects'
+        assert type(anns) == list, 'Results are not an array of objects'
         annsImgIds = [ann['image_id'] for ann in anns]
         assert set(annsImgIds) == (set(annsImgIds) & set(self.getImgIds())), \
                                'Results do not correspond to current Visual Genome set'
         if 'bbox' in anns[0] and not anns[0]['bbox']==[]:
-            res.cats = copy.deepcopy(self.cats)
+            res.dataset['categories'] = copy.deepcopy(self.dataset['categories'])
             for id, ann in enumerate(anns):
                 bb = ann['bbox']
                 x1, x2, y1, y2 = [bb[0], bb[0]+bb[2], bb[1], bb[1]+bb[3]]
                 ann['id'] = id+1
+                ann['area'] = bb[2]*bb[3]
         print('DONE (t={:0.2f}s)'.format(time.time() - tic))
-        res.anns = anns
+
+        res.dataset['annotations'] = anns
         res.createIndex()
         return res
 

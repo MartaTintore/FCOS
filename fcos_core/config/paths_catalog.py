@@ -31,6 +31,10 @@ class DatasetCatalog(object):
             "img_dir": "coco/val2014",
             "ann_file": "coco/annotations/instances_minival2014.json"
         },
+        "coco_mini_2014": {
+            "img_dir": "coco/coco_mini_2014/val2014",
+            "ann_file": "coco/coco_mini_2014/annotations/instances_val2014.json"
+        },
         "coco_2014_valminusminival": {
             "img_dir": "coco/val2014",
             "ann_file": "coco/annotations/instances_valminusminival2014.json"
@@ -108,9 +112,15 @@ class DatasetCatalog(object):
             "img_dir": "cityscapes/images",
             "ann_file": "cityscapes/annotations/instancesonly_filtered_gtFine_test.json"
         },
-        "visual_genome_coco_classes": {
+        "visual_genome_filtered_classes": {
             "img_dir": "visual_genome/all",
-            "ann_file": "visual_genome/annotations/objects.json"
+            "ann_file": "visual_genome/annotations/objects_coco_classes.json",
+            "cats_file": "visual_genome/ms_coco_classnames.json"
+        },
+        "visual_genome_filtered_classes_small": {
+            "img_dir": "visual_genome/small",
+            "ann_file": "visual_genome/annotations/objects.json",
+            "cats_file": "visual_genome/ms_coco_classnames.json"
         }
     }
 
@@ -144,6 +154,7 @@ class DatasetCatalog(object):
             args = dict(
                 root=os.path.join(data_dir, attrs["img_dir"]),
                 ann_file=os.path.join(data_dir, attrs["ann_file"]),
+                cats_file=os.path.join(data_dir, attrs["cats_file"])
             )
             return dict(
                 factory="VisualGenomeDataset",
