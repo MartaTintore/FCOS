@@ -30,8 +30,7 @@ def main():
         "--min-image-size",
         type=int,
         default=800,
-        help="Smallest size of the image to feed to the model. "
-            "Model was trained with 800, which gives best results",
+        help="Smallest size of the image to feed to the model (use img size 800 for best results)",
     )
     parser.add_argument(
         "--ground-truth-file",
@@ -103,7 +102,7 @@ def main():
         if img is None:
             continue
         start_time = time.time()
-        composite = vg_demo.run_on_opencv_image(img)
+        composite = vg_demo.run_on_opencv_image(img, im_name)
         print("{}\tinference time: {:.2f}s".format(im_name, time.time() - start_time))
         cv2.imwrite('demo/output_imgs/visual_genome/' + im_name, composite)
 

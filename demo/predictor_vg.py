@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 import cv2
 import torch
+import json
 from torchvision import transforms as T
 
 from fcos_core.modeling.detector import build_detection_model
@@ -28,7 +29,7 @@ class VisualGenomeDemo(object):
         "sink","refrigerator","book","clock","vase","scissors","teddy bear",
         "hair drier","toothbrush"]
 
-    def __init__(self, cfg, confidence_thresholds_for_classes, min_image_size=224):
+    def __init__(self, cfg, confidence_thresholds_for_classes, min_image_size=224, ground_truth_file=None):
 
         self.cfg = cfg.clone()
         self.model = build_detection_model(cfg)
@@ -36,6 +37,7 @@ class VisualGenomeDemo(object):
         self.device = torch.device(cfg.MODEL.DEVICE)
         self.model.to(self.device)
         self.min_image_size = min_image_size
+        self.ground_truth_file = ground_truth_file
 
         save_dir = cfg.OUTPUT_DIR
         checkpointer = DetectronCheckpointer(cfg, self.model, save_dir=save_dir)
@@ -78,7 +80,7 @@ class VisualGenomeDemo(object):
         )
         return transform
 
-    def run_on_opencv_image(self, image):
+    def run_on_opencv_image(self, image, img_name):
         """
         Arguments:
             image (np.ndarray): an image as returned by OpenCV
@@ -90,13 +92,35 @@ class VisualGenomeDemo(object):
         """
         predictions = self.compute_prediction(image)
         top_predictions = self.select_top_predictions(predictions)
+        if self.ground_truth_file is not None:
+            img_id = int(img_name.split('.')[0])
+            gt = self.get_gt(img_id)
 
         result = image.copy()
         
         result = self.overlay_boxes(result, top_predictions)
         result = self.overlay_class_names(result, top_predictions)
-
+        if self.ground_truth_file is not None:
+            result = self.overlay_boxes_cats_gt(result, gt)
+        
         return result
+
+    def get_gt(self, img_id):
+
+        with open(self.ground_truth_file, 'r') as gt_file:
+            bboxes_gt = json.load(gt_file)
+   
+        gt = {'coords': [], 'cats': []}
+        for image in bboxes_gt:
+            id_img = int(image['image_id'])
+            if id_img == img_id:
+                for bbox in image['objects']:
+                    box_coord = [bbox['x'], bbox['y'], bbox['w'], bbox['h']]
+                    cat = bbox['names'][0]
+                    gt['coords'].append(box_coord)
+                    gt['cats'].append(cat)
+        
+        return gt
 
     def compute_prediction(self, original_image):
         """
@@ -182,6 +206,28 @@ class VisualGenomeDemo(object):
 
         return image
 
+    def overlay_boxes_cats_gt(self, image, gt):
+
+        """
+        Adds the gt boxes on top of the image
+
+        Arguments:
+            image (np.ndarray): an image as returned by OpenCV
+            gt (dict): ground truth coordinates of bounding boxes
+        """
+        color = (230,230,250)
+
+        gt_coords = gt['coords']
+        gt_cats = gt['cats']
+
+        for box, cat in zip(gt_coords, gt_cats):
+            top_left = [box[0], box[1]]
+            bottom_right = [box[0]+box[2], box[1]+box[3]]
+            image = cv2.rectangle(image, tuple(top_left), tuple(bottom_right), tuple(color), 2)
+            x, y = box[:2]
+            cv2.putText(image, str(cat), (x, y), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1)
+        return image
+
     def overlay_class_names(self, image, predictions):
         """
         Adds detected class names and scores in the positions defined by the
@@ -206,3 +252,4 @@ class VisualGenomeDemo(object):
             )
 
         return image
+

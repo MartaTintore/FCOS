@@ -17,6 +17,12 @@ from matplotlib.patches import Polygon
 
 from fcos_core.structures.bounding_box import BoxList
 
+COCO_CLASSES_SIMILAR = {
+            'guy':'person', 
+            'man':'person',
+            'carrott':'carrot', 
+        }
+
 def _isArrayLike(obj):
     return hasattr(obj, '__iter__') and hasattr(obj, '__len__')
 
@@ -92,11 +98,17 @@ class VisualGenome:
             obj_list = []
             for object_dic in image['objects']:
                 try:
-                    obj_class = str(object_dic['names'][0])
+                    obj_cat = str(object_dic['names'][0])
                 except IndexError:
                     continue
-                if obj_class in cats:
-                    obj_list.append(object_dic) 
+                if (obj_cat in cats):
+                    obj_list.append(object_dic)
+                elif (obj_cat[-1] == 's') and (obj_cat[:-1] in cats):
+                    object_dic['names'] = [obj_cat[:-1]]
+                    obj_list.append(object_dic)
+                elif obj_cat in COCO_CLASSES_SIMILAR.keys():
+                    object_dic['names'] = [COCO_CLASSES_SIMILAR[obj_cat]]
+                    obj_list.append(object_dic)
             if len(obj_list)>0:
                 img_dic = {}
                 img_dic['image_id'] = image['image_id']
